@@ -1,0 +1,15 @@
+[package]
+name = "claseex"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+opt-level = 3
+debug = false
+
+[dependencies]
+raylib = "5.5.1"
+rodio = "0.14" 
+gilrs = "0.8"
+nalgebra = "0.29"
+serde_json = "1.0"
