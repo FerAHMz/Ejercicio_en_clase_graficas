@@ -74,9 +74,17 @@ fn main() {
         45.0,                         // FOV
     );
 
-    // Crear una textura procedural para el cubo
-    let image = Image::gen_image_checked(64, 64, 8, 8, Color::WHITE, Color::GRAY);
-    let _cube_texture = rl.load_texture_from_image(&thread, &image);
+    // Cargar la textura del iron block desde assets
+    let cube_texture = rl.load_texture(&thread, "assets/iron_block.png")
+        .expect("Failed to load iron_block.png texture");
+    
+    // Crear un mesh de cubo y modelo para aplicar la textura correctamente
+    let cube_mesh = Mesh::gen_mesh_cube(&thread, 2.0, 2.0, 2.0);
+    let weak_mesh = unsafe { cube_mesh.make_weak() };
+    let mut cube_model = rl.load_model_from_mesh(&thread, weak_mesh).unwrap();
+    
+    // Asignar la textura al material del modelo
+    cube_model.materials_mut()[0].maps_mut()[0].texture = *cube_texture;
 
     // Variables para la animación del cubo
     let mut rotation_x = 0.0f32;
@@ -93,10 +101,11 @@ fn main() {
 
     // Loop principal
     while !rl.window_should_close() {
-        // Actualizar rotaciones del cubo
-        rotation_x += 20.0 * rl.get_frame_time(); // Rotación en X
-        rotation_y += 30.0 * rl.get_frame_time(); // Rotación en Y
-        rotation_z += 25.0 * rl.get_frame_time(); // Rotación en Z
+        // Las variables de rotación se mantienen para los cálculos de iluminación
+        // pero ya no se incrementan para que el cubo esté estático
+        // rotation_x += 10.0 * rl.get_frame_time(); // Rotación en X deshabilitada
+        // rotation_y += 15.0 * rl.get_frame_time(); // Rotación en Y deshabilitada
+        // rotation_z += 12.0 * rl.get_frame_time(); // Rotación en Z deshabilitada
 
         // Control de cámara: acercar/alejar con rueda del mouse, rotar con mouse
         rl.update_camera(&mut camera, CameraMode::CAMERA_ORBITAL);
@@ -126,7 +135,7 @@ fn main() {
                 Color::new(100, 100, 100, 255), // Gris
             );
 
-            // === CUBO PRINCIPAL CON ROTACIÓN E ILUMINACIÓN DIFUSA ===
+            // === CUBO PRINCIPAL CON ROTACIÓN, TEXTURA E ILUMINACIÓN DIFUSA ===
             
             // Aplicar transformaciones manuales para la rotación
             // Primero dibujamos la sombra del cubo en el plano
@@ -136,57 +145,35 @@ fn main() {
                 Color::new(20, 20, 20, 180), // Sombra oscura semi-transparente
             );
 
-            // Dibujar el cubo principal con color fijo azul
+            // Dibujar el cubo principal con textura usando el modelo
             let cube_position = Vector3::new(0.0, 0.0, 0.0);
-            let base_cube_color = Color::new(100, 150, 255, 255); // Azul base
             
-            // Calcular iluminación para diferentes caras del cubo (aplicando rotación a las normales)
-            // Cara frontal (normal hacia +Z)
-            let front_normal = rotate_vector(Vector3::new(0.0, 0.0, 1.0), rotation_x.to_radians(), rotation_y.to_radians(), rotation_z.to_radians());
-            let front_color = calculate_diffuse_lighting(
-                cube_position,
-                front_normal,
-                light_position,
-                base_cube_color,
-                ambient_intensity,
-                diffuse_intensity,
-            );
+            // Calcular la iluminación promedio para el cubo estático
+            let front_normal = Vector3::new(0.0, 0.0, 1.0);   // Cara frontal fija
+            let top_normal = Vector3::new(0.0, 1.0, 0.0);     // Cara superior fija
+            let right_normal = Vector3::new(1.0, 0.0, 0.0);   // Cara derecha fija
             
-            // Cara superior (normal hacia +Y)
-            let top_normal = rotate_vector(Vector3::new(0.0, 1.0, 0.0), rotation_x.to_radians(), rotation_y.to_radians(), rotation_z.to_radians());
-            let top_color = calculate_diffuse_lighting(
-                cube_position,
-                top_normal,
-                light_position,
-                base_cube_color,
-                ambient_intensity,
-                diffuse_intensity,
-            );
+            let light_direction = (light_position - cube_position).normalized();
+            let front_lighting = front_normal.dot(light_direction).max(0.0);
+            let top_lighting = top_normal.dot(light_direction).max(0.0);
+            let right_lighting = right_normal.dot(light_direction).max(0.0);
+            let avg_lighting = ambient_intensity + diffuse_intensity * (front_lighting + top_lighting + right_lighting) / 3.0;
+            let avg_lighting = avg_lighting.min(1.0);
             
-            // Cara derecha (normal hacia +X)
-            let right_normal = rotate_vector(Vector3::new(1.0, 0.0, 0.0), rotation_x.to_radians(), rotation_y.to_radians(), rotation_z.to_radians());
-            let right_color = calculate_diffuse_lighting(
-                cube_position,
-                right_normal,
-                light_position,
-                base_cube_color,
-                ambient_intensity,
-                diffuse_intensity,
-            );
-            
-            // Dibujar el cubo principal (usaremos el color promedio para simplicidad)
-            let avg_lighting = (front_color.r as f32 + top_color.r as f32 + right_color.r as f32) / (3.0 * 255.0);
-            let lit_cube_color = Color::new(
-                (base_cube_color.r as f32 * avg_lighting) as u8,
-                (base_cube_color.g as f32 * avg_lighting) as u8,
-                (base_cube_color.b as f32 * avg_lighting) as u8,
+            // Color de tinte para modular la textura según la iluminación
+            let texture_tint = Color::new(
+                (255.0 * avg_lighting) as u8,
+                (255.0 * avg_lighting) as u8,
+                (255.0 * avg_lighting) as u8,
                 255,
             );
             
-            d3d.draw_cube(
+            // Dibujar el modelo del cubo sin rotación (estático)
+            d3d.draw_model(
+                &cube_model,
                 cube_position,
-                2.0, 2.0, 2.0,
-                lit_cube_color,
+                1.0, // Escala normal
+                texture_tint,
             );
 
             // Dibujar las aristas del cubo para mayor definición
