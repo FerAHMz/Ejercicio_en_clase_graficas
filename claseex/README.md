@@ -2,20 +2,21 @@
 
 ## 🌟 Descripción del Proyecto
 
-Este proyecto implementa un **motor de raytracing completo** que renderiza un pequeño diorama estilo Minecraft con efectos avanzados de iluminación, reflexiones, refracciones y un skybox procedural. El proyecto ha sido optimizado para performance usando **paralelización con Rayon** y técnicas de raytracing modernas.
+Este proyecto implementa un diorama interactivo inspirado en Minecraft utilizando técnicas avanzadas de raytracing en tiempo real. La aplicación está desarrollada en Rust usando la biblioteca Raylib y presenta un mundo en miniatura compuesto por diferentes tipos de bloques con propiedades físicas realistas de materiales.
+
+El motor de raytracing personalizado simula el comportamiento real de la luz, manejando múltiples fenómenos ópticos complejos incluyendo reflexiones, refracciones y dispersión difusa. El sistema utiliza técnicas de optimización para mantener un rendimiento aceptable durante la interacción en tiempo real.
 
 ## ✨ Características Implementadas
 
-### 🏆 Aspectos Evaluados Implementados
+### 🏆 Características Principales Implementadas
 
-- **[20 puntos] Rotación de Diorama y Control de Cámara**
-  - ✅ Cámara orbital completamente funcional
-  - ✅ Zoom con rueda del mouse (2.0 - 40.0 unidades)
-  - ✅ Rotación con click y arrastre
-  - ✅ Controles de teclado (WASD)
-  - ✅ Auto-rotación activable con ESPACIO
+- **Rotación de Diorama y Control de Cámara**
+  - ✅ **Click y Arrastrar**: Rota la cámara alrededor del diorama para observarlo desde diferentes ángulos
+  - ✅ **Rueda del Mouse**: Controla el zoom de acercamiento y alejamiento (2.0 - 40.0 unidades)
+  - ✅ **Teclas WASD**: Control manual directo del movimiento de la cámara en todas las direcciones
+  - ✅ **Tecla SPACE**: Activa y desactiva el modo de rotación automática continua
 
-- **[25 puntos] 5 Materiales Diferentes Implementados**
+- **Materiales Diferentes Implementados**
   1. **Hierro** - Material reflectivo metálico
   2. **Diamante** - Material con alta reflectividad y emisión
   3. **Césped** - Material difuso orgánico
@@ -23,19 +24,19 @@ Este proyecto implementa un **motor de raytracing completo** que renderiza un pe
   5. **Agua** - Material transparente con refracción (índice 1.33)
   6. **Vidrio** - Material transparente con refracción (índice 1.52)
 
-- **[10 puntos] Refracción Implementada**
+- **Refracción Implementada**
   - ✅ **Agua**: Refracción realista con índice 1.33
   - ✅ **Vidrio**: Refracción con índice 1.52
   - ✅ Implementación completa de Ley de Snell
   - ✅ Reflexión total interna
   - ✅ Aproximación de Schlick para reflectancia
 
-- **[5 puntos] Reflexión Implementada**
+- **Reflexión Implementada**
   - ✅ **Hierro**: Alta reflectividad metálica
   - ✅ **Diamante**: Reflectividad premium con emisión
   - ✅ Raytracing recursivo para múltiples rebotes
 
-- **[20 puntos] Skybox Implementado**
+- **Skybox Implementado**
   - ✅ Skybox procedural con gradiente vertical
   - ✅ Sol con resplandor dinámico
   - ✅ Colores del cielo realistas
@@ -68,15 +69,34 @@ pub struct Material {
 }
 ```
 
-## 🎮 Controles
+#### Efectos Ópticos Realistas
+El motor de raytracing simula múltiples fenómenos ópticos complejos:
+- **Reflexiones** calculadas con vectores matemáticamente precisos
+- **Refracciones** implementando la Ley de Snell con índices reales de materiales
+- **Aproximación de Schlick** para calcular reflectancia precisa
+- **Reflexión total interna** cuando los rayos no pueden refractarse
 
-| Control | Acción |
-|---------|--------|
-| **Click + Arrastrar** | Rotación orbital de cámara |
-| **Rueda del Mouse** | Zoom in/out (2.0-40.0 unidades) |
-| **WASD** | Control manual de cámara y zoom |
-| **ESPACIO** | Toggle auto-rotación orbital |
-| **R** | Cambiar entre raytracing y rasterización |
+## 🏗️ Composición del Diorama
+
+El diorama presenta una colección cuidadosamente diseñada de bloques que demuestran las capacidades del motor:
+- **Bloques de hierro** con reflexiones metálicas brillantes
+- **Diamantes** con efectos de refracción y brillo intenso
+- **Bloques de césped** con texturas realistas multicara
+- **Bloques de tierra** con textura natural mate
+- **Agua** que demuestra transparencia y refracción realista
+- **Vidrio** con alta transparencia y efectos ópticos sutiles
+
+## 🚀 Optimizaciones de Rendimiento
+
+El proyecto implementa múltiples estrategias de optimización para mantener la interactividad:
+- **Renderizado adaptativo** que ajusta la frecuencia según la actividad del usuario
+- **Calidad variable** que permite balance entre fidelidad visual y rendimiento
+- **Detección de interacción** para aumentar frecuencia durante uso activo
+- **Intervalos inteligentes** que reducen carga durante períodos de inactividad
+
+## 🏆 Logros Técnicos
+
+Este proyecto representa una implementación completa de un motor de raytracing funcional que demuestra comprensión profunda de los principios ópticos y matemáticos. La integración exitosa de múltiples sistemas complejos incluyendo renderizado, materiales, texturas y controles de usuario resulta en una experiencia interactiva fluida y visualmente impresionante que simula con precisión el comportamiento de la luz en un entorno tridimensional.
 
 ## 🏗️ Arquitectura del Proyecto
 
@@ -101,15 +121,16 @@ fastrand = "2.0"    # Generación de números aleatorios
 nalgebra = "0.29"   # Matemáticas vectoriales
 ```
 
-## 🎯 Diorama Implementado
+## 🎯 Estructura del Diorama
 
-### Estructura del Mundo
-- **Base de tierra** (4x4 bloques)
-- **Superficie de césped** (área circular)
-- **Torre de hierro** (estructura reflectiva)
-- **Pirámide de diamante** (5 bloques con emisión)
-- **Lago de agua** (3 bloques con refracción)
-- **Estructura de vidrio** (4 bloques transparentes)
+### Composición del Mundo
+- **Terraza Natural Escalonada** - Base de tierra en círculos concéntricos (3 niveles)
+- **Castillo de Hierro** - Fortaleza completa con torres y murallas reflectivas
+- **Templo de Diamante** - Estructura en cruz con pirámide brillante y efectos de emisión
+- **Lago y Cascada** - Sistema acuático en forma de L con cascada vertical
+- **Observatorio de Vidrio** - Invernadero transparente con cúpula y torre de observación
+- **Puentes y Caminos** - Conexiones entre estructuras con materiales diversos
+- **Elementos Flotantes** - Cristales suspendidos y efectos atmosféricos
 
 ### Propiedades Físicas por Material
 
@@ -180,44 +201,36 @@ cargo run --release
 - **Paralelización**: Utiliza todos los cores disponibles
 
 ### Optimizaciones Implementadas
-1. **Diorama reducido**: Solo objetos esenciales
-2. **Paralelización por filas**: Cada fila se procesa en un hilo separado
-3. **Renderizado adaptativo**: No renderiza en cada frame
-4. **Estructuras eficientes**: Minimización de allocaciones
-
-## 🎓 Aspectos Educativos Cubiertos
-
-### Conceptos de Raytracing
-- [x] Generación y propagación de rayos
-- [x] Algoritmos de intersección geométrica
-- [x] Modelos de iluminación física
-- [x] Reflexión y refracción de la luz
-- [x] Anti-aliasing y muestreo
-
-### Programación Gráfica Avanzada
-- [x] Paralelización de algoritmos gráficos
-- [x] Optimización de performance en tiempo real
-- [x] Estructuras de datos para gráficos
-- [x] Integración de múltiples efectos visuales
-
-## 🏆 Cumplimiento de Requisitos
-
-| Requisito | Puntos | Estado | Implementación |
-|-----------|--------|---------|----------------|
-| Rotación y cámara | 20 | ✅ Completo | Sistema orbital completo |
-| 5 materiales diferentes | 25 | ✅ Completo | 6 materiales únicos |
-| Refracción | 10 | ✅ Completo | Agua y vidrio |
-| Reflexión | 5 | ✅ Completo | Hierro y diamante |
-| Skybox | 20 | ✅ Completo | Procedural con sol |
-| **TOTAL** | **80** | ✅ | **80/80 puntos** |
+1. **Diorama artísticamente balanceado**: Diseño creativo que muestra todos los materiales de forma espectacular
+2. **Paralelización por chunks**: Distribución inteligente del trabajo entre cores
+3. **Renderizado adaptativo**: Ajusta la frecuencia según la interacción del usuario
+4. **Estructuras eficientes**: Minimización de allocaciones y uso óptimo de memoria
+5. **Composición visual estratégica**: Elementos posicionados para máximo impacto visual del raytracing
 
 ## 🔮 Características Adicionales
 
 - **Motor de raytracing desde cero** - Implementación completa propia
-- **Modo comparativo** - Toggle entre raytracing y rasterización
-- **Interfaz informativa** - UI con controles y estadísticas
+- **Interfaz informativa** - UI con controles y estadísticas en pantalla
 - **Código bien documentado** - Comentarios extensivos en español
 - **Arquitectura modular** - Fácil extensión y mantenimiento
+- **Composición visual** - Cada ángulo de cámara ofrece una vista espectacular
+
+## � Aspectos Educativos Cubiertos
+
+### Conceptos de Raytracing
+- Generación y propagación de rayos
+- Algoritmos de intersección geométrica
+- Modelos de iluminación física
+- Reflexión y refracción de la luz
+- Anti-aliasing y muestreo
+
+### Programación Gráfica Avanzada
+- Paralelización de algoritmos gráficos
+- Optimización de performance en tiempo real
+- Estructuras de datos para gráficos
+- Integración de múltiples efectos visuales
+
+
 
 ---
 

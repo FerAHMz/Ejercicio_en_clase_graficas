@@ -105,16 +105,28 @@ impl Material {
 
     // Función para calcular el scatter de un rayo con textura
     pub fn scatter(&self, ray_in: &Ray, rec: &HitRecord, attenuation: &mut Vector3, scattered: &mut Ray, texture_sampler: &TextureSampler) -> bool {
-        // Si el material es principalmente reflectivo
-        if self.reflectivity > 0.5 && self.transparency < 0.5 {
-            self.reflect(ray_in, rec, attenuation, scattered, texture_sampler)
-        } 
-        // Si el material es principalmente transparente (refracción)
-        else if self.transparency > 0.5 {
+        // Lógica mejorada para materiales transparentes
+        if self.transparency > 0.7 {
+            // Material altamente transparente -> usar refracción
             self.refract(ray_in, rec, attenuation, scattered, texture_sampler)
+        } 
+        else if self.reflectivity > 0.5 && self.transparency < 0.3 {
+            // Material principalmente reflectivo
+            self.reflect(ray_in, rec, attenuation, scattered, texture_sampler)
         }
-        // Material difuso
+        else if self.transparency > 0.3 {
+            // Material semi-transparente -> combinación probabilística
+            let rand = fastrand::f32();
+            if rand < self.transparency {
+                self.refract(ray_in, rec, attenuation, scattered, texture_sampler)
+            } else if rand < self.transparency + self.reflectivity {
+                self.reflect(ray_in, rec, attenuation, scattered, texture_sampler)
+            } else {
+                self.diffuse_scatter(ray_in, rec, attenuation, scattered, texture_sampler)
+            }
+        }
         else {
+            // Material difuso
             self.diffuse_scatter(ray_in, rec, attenuation, scattered, texture_sampler)
         }
     }
@@ -139,43 +151,61 @@ impl Material {
     }
 
     fn refract(&self, ray_in: &Ray, rec: &HitRecord, attenuation: &mut Vector3, scattered: &mut Ray, texture_sampler: &TextureSampler) -> bool {
-        // 1) Textura y alpha
-        let texture_path = self.get_texture_for_normal(rec.normal);
-        let tex = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
-        let tex_a = (tex.a as f32 / 255.0).clamp(0.0, 1.0);
-
-        // 2) "Huecos" del PNG (líneas de vidrio dejan marco, fondo transparente pasa el rayo)
-        if tex_a < 0.05 {
-            // Pasa como aire (evita teñir con RGB del PNG)
-            let dir = ray_in.direction;
-            *scattered = spawn_ray(rec.point, rec.normal, dir);
-            *attenuation = Vector3::new(1.0, 1.0, 1.0);
-            return true;
-        }
-
-        // 3) Fresnel + refracción/reflectancia
-        let eta = if rec.front_face { 1.0 / self.refraction_index } else { self.refraction_index };
-        let unit_dir = ray_in.direction.normalized();
-        let cos_theta = (-unit_dir).dot(rec.normal).min(1.0);
-        let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
-        let cannot_refract = eta * sin_theta > 1.0;
-
-        let fresnel = Self::reflectance(cos_theta, eta);
-        let do_reflect = cannot_refract || fastrand::f32() < fresnel;
-
-        let dir = if do_reflect {
-            Self::reflect_vector(unit_dir, rec.normal)
+        // Implementación robusta de refracción desde cero
+        
+        // 1) Obtener color base del material
+        let material_color = self.albedo;
+        
+        // 2) Calcular índice de refracción efectivo
+        let refraction_ratio = if rec.front_face {
+            1.0 / self.refraction_index  // Aire -> Material
         } else {
-            Self::refract_vector(unit_dir, rec.normal, eta)
+            self.refraction_index        // Material -> Aire
         };
-
-        // 4) Usar spawn_ray para offset automático basado en dirección
-        *scattered = spawn_ray(rec.point, rec.normal, dir);
-
-        // 5) Atenuación neutra (sin teñir con RGB)
-        let absorption = 0.005; // Reducido para evitar oscurecimiento excesivo
-        *attenuation = Vector3::new(1.0 - absorption, 1.0 - absorption, 1.0 - absorption);
-
+        
+        // 3) Normalizar dirección del rayo incidente
+        let unit_direction = ray_in.direction.normalized();
+        
+        // 4) Calcular coseno del ángulo de incidencia
+        let cos_theta = (-unit_direction).dot(rec.normal).min(1.0);
+        let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+        
+        // 5) Verificar si es posible la refracción (Ley de Snell)
+        let cannot_refract = refraction_ratio * sin_theta > 1.0;
+        
+        // 6) Calcular reflectancia usando aproximación de Schlick
+        let reflectance = if cannot_refract {
+            1.0  // Reflexión total interna
+        } else {
+            Self::reflectance(cos_theta, refraction_ratio)
+        };
+        
+        // 7) Decidir entre reflexión y refracción usando probabilidad
+        let direction = if cannot_refract || fastrand::f32() < reflectance {
+            // Reflexión
+            Self::reflect_vector(unit_direction, rec.normal)
+        } else {
+            // Refracción usando Ley de Snell
+            let r_out_perp = (unit_direction + rec.normal * cos_theta) * refraction_ratio;
+            let perp_length_sq = r_out_perp.x * r_out_perp.x + r_out_perp.y * r_out_perp.y + r_out_perp.z * r_out_perp.z;
+            let parallel_magnitude = (1.0 - perp_length_sq).max(0.0).sqrt();
+            let r_out_parallel = rec.normal * (-parallel_magnitude);
+            r_out_perp + r_out_parallel
+        };
+        
+        // 8) Crear rayo dispersado con offset pequeño para evitar self-intersection
+        let offset = rec.normal * 0.001;
+        let new_origin = if direction.dot(rec.normal) > 0.0 {
+            rec.point + offset  // Rayo sale de la superficie
+        } else {
+            rec.point - offset  // Rayo entra en la superficie
+        };
+        
+        *scattered = Ray::new(new_origin, direction);
+        
+        // 9) Atenuación basada en el material (usar el albedo directamente)
+        *attenuation = material_color;
+        
         true
     }
 
@@ -214,11 +244,11 @@ impl Material {
         r_out_perp + r_out_parallel
     }
 
-    fn reflectance(cosine: f32, ref_idx: f32) -> f32 {
-        // Schlick's approximation
-        let mut r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
-        r0 = r0 * r0;
-        r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)
+    fn reflectance(cosine: f32, refraction_ratio: f32) -> f32 {
+        // Aproximación de Schlick mejorada para reflectancia
+        let r0 = ((1.0 - refraction_ratio) / (1.0 + refraction_ratio)).powi(2);
+        let one_minus_cos = (1.0 - cosine).max(0.0);
+        r0 + (1.0 - r0) * one_minus_cos.powi(5)
     }
 
     fn random_unit_vector() -> Vector3 {
@@ -291,24 +321,24 @@ impl Material {
     pub fn water() -> Self {
         Self::new(
             "assets/water_still.png".to_string(),
-            Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo textura PNG
-            0.3,   // Especularidad moderada (aumentada)
-            0.95,  // Muy transparente para alpha channel cutout  
-            0.05,  // Reflectividad muy baja para dieléctricos
-            1.33,  // Índice de refracción del agua
-            16.0   // Brillo aumentado
+            Vector3::new(0.2, 0.4, 0.8),    // Azul agua (valores originales)
+            0.3,   // Especularidad moderada
+            0.7,   // Bastante transparente
+            0.4,   // Reflectividad moderada
+            1.33,  // Índice de refracción del agua real
+            32.0   // Moderadamente brillante
         )
     }
     
     pub fn glass() -> Self {
         Self::new(
             "assets/glass.png".to_string(),
-            Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo textura PNG
-            0.2,   // Especularidad aumentada
-            0.95,  // Muy transparente para alpha channel cutout
-            0.05,  // Reflectividad muy baja para dieléctricos
-            1.52,  // Índice de refracción del vidrio
-            8.0    // Brillo moderado
+            Vector3::new(0.9, 0.9, 0.9),    // Casi blanco (valores originales)
+            0.8,   // Alta especularidad
+            0.9,   // Muy transparente
+            0.1,   // Baja reflectividad
+            1.52,  // Índice de refracción del vidrio real
+            64.0   // Brillante
         )
     }
 }
