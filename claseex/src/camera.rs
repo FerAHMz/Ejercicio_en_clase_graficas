@@ -131,4 +131,8 @@ impl CameraController {
         // Retornar la cámara actual ya que la posición se actualiza automáticamente
         self.camera
     }
+
+    pub fn get_camera(&self) -> Camera3D {
+        self.camera
+    }
 }
