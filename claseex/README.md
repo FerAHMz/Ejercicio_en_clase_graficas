@@ -1,6 +1,12 @@
 # Diorama Raytraced Minecraft - Proyecto de Gráficas
 
-## 🌟 Descripción del Proyecto
+## � Demostración
+
+[![Video Demostración del Proyecto](https://img.youtube.com/vi/WenY2q4z7fE/maxresdefault.jpg)](https://youtu.be/WenY2q4z7fE)
+
+**[Ver Video Demostración en YouTube](https://youtu.be/WenY2q4z7fE)**
+
+## �🌟 Descripción del Proyecto
 
 Este proyecto implementa un diorama interactivo inspirado en Minecraft utilizando técnicas avanzadas de raytracing en tiempo real. La aplicación está desarrollada en Rust usando la biblioteca Raylib y presenta un mundo en miniatura compuesto por diferentes tipos de bloques con propiedades físicas realistas de materiales.
 
