@@ -6,6 +6,9 @@ use image::{DynamicImage, GenericImageView};
 #[derive(Clone)]
 pub struct Material {
     pub texture: String,
+    pub texture_top: Option<String>,    // Textura para cara superior (opcional)
+    pub texture_bottom: Option<String>, // Textura para cara inferior (opcional)
+    pub texture_sides: Option<String>,  // Textura para caras laterales (opcional)
     pub albedo: Vector3,           // Color base (RGB 0-1)
     pub specular: f32,            // Reflectividad especular (0-1)
     pub transparency: f32,        // Transparencia (0=opaco, 1=transparente)
@@ -24,6 +27,9 @@ impl Material {
     pub fn new(texture: String, albedo: Vector3, specular: f32, transparency: f32, reflectivity: f32, refraction_index: f32, shininess: f32) -> Self {
         Self {
             texture,
+            texture_top: None,
+            texture_bottom: None,
+            texture_sides: None,
             albedo,
             specular,
             transparency,
@@ -37,6 +43,54 @@ impl Material {
     pub fn with_emission(mut self, emission: Vector3) -> Self {
         self.emission = emission;
         self
+    }
+
+    // Método para crear materiales con texturas por cara
+    pub fn with_face_textures(
+        main_texture: String, 
+        top_texture: Option<String>,
+        bottom_texture: Option<String>, 
+        sides_texture: Option<String>,
+        albedo: Vector3, 
+        specular: f32, 
+        transparency: f32, 
+        reflectivity: f32, 
+        refraction_index: f32, 
+        shininess: f32
+    ) -> Self {
+        Self {
+            texture: main_texture,
+            texture_top: top_texture,
+            texture_bottom: bottom_texture,
+            texture_sides: sides_texture,
+            albedo,
+            specular,
+            transparency,
+            reflectivity,
+            refraction_index,
+            shininess,
+            emission: Vector3::zero(),
+        }
+    }
+
+    // Función para obtener la textura apropiada según la normal de la superficie
+    pub fn get_texture_for_normal(&self, normal: Vector3) -> &String {
+        // Determinar qué cara del cubo basándose en la normal
+        let abs_normal = Vector3::new(normal.x.abs(), normal.y.abs(), normal.z.abs());
+        
+        if abs_normal.y > abs_normal.x && abs_normal.y > abs_normal.z {
+            // Normal principalmente en Y
+            if normal.y > 0.0 {
+                // Cara superior (+Y)
+                self.texture_top.as_ref().unwrap_or(&self.texture)
+            } else {
+                // Cara inferior (-Y)
+                self.texture_bottom.as_ref().unwrap_or(&self.texture)
+            }
+        } else {
+            // Caras laterales (X o Z dominante)
+            self.texture_sides.as_ref().unwrap_or(&self.texture)
+        }
     }
 
     // Función para calcular el scatter de un rayo con textura
@@ -59,8 +113,11 @@ impl Material {
         let reflected = Self::reflect_vector(ray_in.direction, rec.normal);
         *scattered = Ray::new(rec.point, reflected);
         
+        // Obtener la textura correcta según la normal de la superficie
+        let texture_path = self.get_texture_for_normal(rec.normal);
+        
         // Para materiales reflectivos, usar el color completo de la textura
-        let texture_color = texture_sampler.sample_texture(&self.texture, rec.u, rec.v);
+        let texture_color = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
         let texture_vec = Vector3::new(
             texture_color.r as f32 / 255.0,
             texture_color.g as f32 / 255.0,
@@ -78,8 +135,11 @@ impl Material {
     }
 
     fn refract(&self, ray_in: &Ray, rec: &HitRecord, attenuation: &mut Vector3, scattered: &mut Ray, texture_sampler: &TextureSampler) -> bool {
+        // Obtener la textura correcta según la normal de la superficie
+        let texture_path = self.get_texture_for_normal(rec.normal);
+        
         // Para materiales transparentes, usar un tinte sutil de la textura, no el color completo
-        let texture_color = texture_sampler.sample_texture(&self.texture, rec.u, rec.v);
+        let texture_color = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
         let texture_vec = Vector3::new(
             texture_color.r as f32 / 255.0,
             texture_color.g as f32 / 255.0,
@@ -125,8 +185,11 @@ impl Material {
 
         *scattered = Ray::new(rec.point, scatter_direction);
         
+        // Obtener la textura correcta según la normal de la superficie
+        let texture_path = self.get_texture_for_normal(rec.normal);
+        
         // Samplear textura para materiales difusos
-        let texture_color = texture_sampler.sample_texture(&self.texture, rec.u, rec.v);
+        let texture_color = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
         *attenuation = Vector3::new(
             texture_color.r as f32 / 255.0,
             texture_color.g as f32 / 255.0,
@@ -192,9 +255,12 @@ impl Material {
     }
     
     pub fn grass() -> Self {
-        Self::new(
-            "assets/grass_top.png".to_string(),
-            Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo textura PNG
+        Self::with_face_textures(
+            "assets/grass_carried.png".to_string(),                   // Textura principal (fallback)
+            Some("assets/grass_carried.png".to_string()),             // Cara superior: césped verde
+            Some("assets/dirt.png".to_string()),                      // Cara inferior: tierra
+            Some("assets/grass_side_carried.png".to_string()),        // Caras laterales: césped+tierra
+            Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo texturas PNG
             0.1,   // Baja especularidad
             0.0,   // Opaco
             0.05,  // Muy poca reflectividad
@@ -204,8 +270,11 @@ impl Material {
     }
     
     pub fn dirt() -> Self {
-        Self::new(
-            "assets/dirt.png".to_string(),
+        Self::with_face_textures(
+            "assets/dirt.png".to_string(),                            // Textura principal
+            Some("assets/grass_carried.png".to_string()),             // Cara superior: césped (para bloques de tierra con césped)
+            Some("assets/dirt.png".to_string()),                      // Cara inferior: tierra
+            Some("assets/grass_side_carried.png".to_string()),        // Caras laterales: césped+tierra
             Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo textura PNG
             0.02,  // Muy poca especularidad
             0.0,   // Opaco
@@ -298,7 +367,7 @@ impl TextureSampler {
                         255
                     ]
                 },
-                "assets/grass_top.png" => {
+                "assets/grass_carried.png" => {
                     // Patrón verde césped
                     let grass_blade = ((x + y * 2) % 4 == 0) && ((x * 3 + y) % 7 < 2);
                     let dirt_spot = ((x * 5 + y * 7) % 23 < 3);
@@ -378,13 +447,20 @@ impl TextureSampler {
             let width = img.width();
             let height = img.height();
             
+            // CORRECCIÓN: Invertir verticalmente la textura grass_side_carried para orientación correcta
+            let corrected_v = if texture_path == "assets/grass_side_carried.png" {
+                1.0 - v  // Invertir coordenada V para mostrar césped arriba, tierra abajo
+            } else {
+                v
+            };
+            
             // Manejar texturas animadas como el agua (16x512 significa 32 frames de 16x16)
             let (actual_width, actual_height, frame_offset) = if texture_path.contains("water") && height > width {
                 let frame_size = width; // Cada frame es 16x16
                 let num_frames = height / frame_size;
                 
                 // Simular animación con tiempo (usar coordenadas para variar el frame)
-                let time_factor = (u + v) * 10.0; // Factor de tiempo simulado
+                let time_factor = (u + corrected_v) * 10.0; // Factor de tiempo simulado
                 let frame_index = (time_factor as u32) % num_frames;
                 
                 (width, frame_size, frame_index * frame_size)
@@ -392,9 +468,9 @@ impl TextureSampler {
                 (width, height, 0)
             };
             
-            // Calcular coordenadas del pixel con wrapping
+            // Calcular coordenadas del pixel con wrapping usando coordenada V corregida
             let x = ((u * actual_width as f32) as u32).min(actual_width - 1);
-            let y = ((v * actual_height as f32) as u32).min(actual_height - 1) + frame_offset;
+            let y = ((corrected_v * actual_height as f32) as u32).min(actual_height - 1) + frame_offset;
             
             // Asegurar que y esté dentro de los límites de la imagen
             let y = y.min(height - 1);
@@ -405,8 +481,8 @@ impl TextureSampler {
             return Color::new(pixel[0], pixel[1], pixel[2], pixel[3]);
         }
         
-        // Si no hay textura PNG, usar blanco puro para debugging
-        eprintln!("WARNING: Texture not found: {}", texture_path);
+        // Si no hay textura PNG, devolver color por defecto sin fallback
+        eprintln!("ERROR: Texture not found: {}", texture_path);
         Color::WHITE
     }
 }

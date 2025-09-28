@@ -144,7 +144,7 @@ pub fn create_raytraced_scene(materials: &[Material]) -> (HittableList, Vec<Mate
     let material_map = vec![
         ("assets/iron_block.png", 0),
         ("assets/diamond_block.png", 1),
-        ("assets/grass_top.png", 2),
+        ("assets/grass_carried.png", 2),    // Césped usa grass_carried como textura principal
         ("assets/dirt.png", 3),
         ("assets/water_still.png", 4),
         ("assets/glass.png", 5),

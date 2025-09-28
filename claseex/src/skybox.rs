@@ -23,7 +23,7 @@ impl Skybox {
             // Usar texturas más apropiadas para un skybox natural
             top_texture: "assets/diamond_block.png".to_string(),    // Cielo brillante como diamante (azul claro)
             horizon_texture: "assets/iron_block.png".to_string(),   // Horizonte metálico neutro
-            bottom_texture: "assets/grass_top.png".to_string(),     // Verde césped en la parte inferior
+            bottom_texture: "assets/grass_carried.png".to_string(),     // Verde césped en la parte inferior
             sun_direction: Vector3::new(0.4, 0.7, 0.3).normalized(), // Sol más alto
             sun_color: Color::new(255, 255, 224, 255),     // Amarillo sol más brillante
             sun_size: 0.015,                               // Sol un poco más pequeño

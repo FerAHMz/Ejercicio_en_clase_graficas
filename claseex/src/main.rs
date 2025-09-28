@@ -34,8 +34,8 @@ fn main() {
     let texture_files = vec![
         "assets/iron_block.png",
         "assets/diamond_block.png", 
-        "assets/grass_top.png",
-        "assets/grass_side_carried.png",  // Textura adicional para el skybox
+        "assets/grass_carried.png",              // Textura superior del césped
+        "assets/grass_side_carried.png",         // Textura lateral césped+tierra
         "assets/dirt.png",
         "assets/water_still.png",
         "assets/glass.png"
