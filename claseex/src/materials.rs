@@ -3,6 +3,16 @@ use crate::ray::{Ray, HitRecord};
 use std::collections::HashMap;
 use image::{DynamicImage, GenericImageView};
 
+const EPS: f32 = 1e-4;
+
+#[inline]
+fn spawn_ray(point: Vector3, normal: Vector3, dir: Vector3) -> Ray {
+    // rec.normal SIEMPRE apunta contra el rayo incidente (por set_face_normal)
+    // Si el nuevo rayo va en el MISMO semiespacio que 'normal', empuja en +normal; si no, en -normal.
+    let sign = if dir.dot(normal) > 0.0 { 1.0 } else { -1.0 };
+    Ray::new(point + normal * (EPS * sign), dir)
+}
+
 #[derive(Clone)]
 pub struct Material {
     pub texture: String,
@@ -110,68 +120,62 @@ impl Material {
     }
 
     fn reflect(&self, ray_in: &Ray, rec: &HitRecord, attenuation: &mut Vector3, scattered: &mut Ray, texture_sampler: &TextureSampler) -> bool {
-        let reflected = Self::reflect_vector(ray_in.direction, rec.normal);
-        *scattered = Ray::new(rec.point, reflected);
-        
-        // Obtener la textura correcta según la normal de la superficie
-        let texture_path = self.get_texture_for_normal(rec.normal);
-        
-        // Para materiales reflectivos, usar el color completo de la textura
-        let texture_color = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
-        let texture_vec = Vector3::new(
-            texture_color.r as f32 / 255.0,
-            texture_color.g as f32 / 255.0,
-            texture_color.b as f32 / 255.0,
-        );
-        
-        // Atenuar ligeramente por reflectividad pero mantener el color base
-        let reflect_factor = 0.7 + self.reflectivity * 0.3; // Mínimo 70% del color
-        *attenuation = Vector3::new(
-            texture_vec.x * reflect_factor,
-            texture_vec.y * reflect_factor, 
-            texture_vec.z * reflect_factor,
-        );
+        let dir = Self::reflect_vector(ray_in.direction.normalized(), rec.normal);
+        *scattered = spawn_ray(rec.point, rec.normal, dir);
+
+        // Considera reflejo blanco solo para materiales altamente transparentes (vidrio/agua)
+        let use_white_reflection = self.transparency >= 0.9;
+
+        if use_white_reflection {
+            *attenuation = Vector3::new(0.98, 0.98, 0.98);
+        } else {
+            let texture_path = self.get_texture_for_normal(rec.normal);
+            let tc = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
+            let tex = Vector3::new(tc.r as f32 / 255.0, tc.g as f32 / 255.0, tc.b as f32 / 255.0);
+            let reflect_factor = 0.7 + self.reflectivity * 0.3;
+            *attenuation = tex * reflect_factor;
+        }
         true
     }
 
     fn refract(&self, ray_in: &Ray, rec: &HitRecord, attenuation: &mut Vector3, scattered: &mut Ray, texture_sampler: &TextureSampler) -> bool {
-        // Obtener la textura correcta según la normal de la superficie
+        // 1) Textura y alpha
         let texture_path = self.get_texture_for_normal(rec.normal);
-        
-        // Para materiales transparentes, usar un tinte sutil de la textura, no el color completo
-        let texture_color = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
-        let texture_vec = Vector3::new(
-            texture_color.r as f32 / 255.0,
-            texture_color.g as f32 / 255.0,
-            texture_color.b as f32 / 255.0,
-        );
-        
-        // Para materiales muy transparentes, usar atenuación alta con un tinte sutil
-        let transparency_factor = 0.8 + self.transparency * 0.2; // Mínimo 80% de transmisión
-        *attenuation = Vector3::new(
-            transparency_factor * (0.9 + texture_vec.x * 0.1),
-            transparency_factor * (0.9 + texture_vec.y * 0.1),
-            transparency_factor * (0.9 + texture_vec.z * 0.1),
-        );
-        let refraction_ratio = if rec.front_face {
-            1.0 / self.refraction_index
-        } else {
-            self.refraction_index
-        };
+        let tex = texture_sampler.sample_texture(texture_path, rec.u, rec.v);
+        let tex_a = (tex.a as f32 / 255.0).clamp(0.0, 1.0);
 
-        let unit_direction = ray_in.direction.normalized();
-        let cos_theta = (-unit_direction).dot(rec.normal).min(1.0);
+        // 2) "Huecos" del PNG (líneas de vidrio dejan marco, fondo transparente pasa el rayo)
+        if tex_a < 0.05 {
+            // Pasa como aire (evita teñir con RGB del PNG)
+            let dir = ray_in.direction;
+            *scattered = spawn_ray(rec.point, rec.normal, dir);
+            *attenuation = Vector3::new(1.0, 1.0, 1.0);
+            return true;
+        }
+
+        // 3) Fresnel + refracción/reflectancia
+        let eta = if rec.front_face { 1.0 / self.refraction_index } else { self.refraction_index };
+        let unit_dir = ray_in.direction.normalized();
+        let cos_theta = (-unit_dir).dot(rec.normal).min(1.0);
         let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+        let cannot_refract = eta * sin_theta > 1.0;
 
-        let cannot_refract = refraction_ratio * sin_theta > 1.0;
+        let fresnel = Self::reflectance(cos_theta, eta);
+        let do_reflect = cannot_refract || fastrand::f32() < fresnel;
 
-        let direction = if cannot_refract || Self::reflectance(cos_theta, refraction_ratio) > fastrand::f32() {
-            Self::reflect_vector(unit_direction, rec.normal)
+        let dir = if do_reflect {
+            Self::reflect_vector(unit_dir, rec.normal)
         } else {
-            Self::refract_vector(unit_direction, rec.normal, refraction_ratio)
+            Self::refract_vector(unit_dir, rec.normal, eta)
         };
 
-        *scattered = Ray::new(rec.point, direction);
+        // 4) Usar spawn_ray para offset automático basado en dirección
+        *scattered = spawn_ray(rec.point, rec.normal, dir);
+
+        // 5) Atenuación neutra (sin teñir con RGB)
+        let absorption = 0.005; // Reducido para evitar oscurecimiento excesivo
+        *attenuation = Vector3::new(1.0 - absorption, 1.0 - absorption, 1.0 - absorption);
+
         true
     }
 
@@ -288,11 +292,11 @@ impl Material {
         Self::new(
             "assets/water_still.png".to_string(),
             Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo textura PNG
-            0.2,   // Especularidad reducida
-            0.9,   // Muy transparente para refracción
-            0.1,   // Reflectividad baja
+            0.3,   // Especularidad moderada (aumentada)
+            0.95,  // Muy transparente para alpha channel cutout  
+            0.05,  // Reflectividad muy baja para dieléctricos
             1.33,  // Índice de refracción del agua
-            8.0    // Brillo reducido
+            16.0   // Brillo aumentado
         )
     }
     
@@ -300,11 +304,11 @@ impl Material {
         Self::new(
             "assets/glass.png".to_string(),
             Vector3::new(1.0, 1.0, 1.0),    // Blanco puro - usar solo textura PNG
-            0.05,  // Especularidad muy baja
-            0.85,  // Alta transparencia
-            0.1,   // Reflectividad muy baja
+            0.2,   // Especularidad aumentada
+            0.95,  // Muy transparente para alpha channel cutout
+            0.05,  // Reflectividad muy baja para dieléctricos
             1.52,  // Índice de refracción del vidrio
-            4.0    // Brillo muy bajo
+            8.0    // Brillo moderado
         )
     }
 }

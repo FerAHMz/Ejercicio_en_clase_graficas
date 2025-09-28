@@ -124,8 +124,8 @@ impl RayTracer {
 
         let mut rec = HitRecord::new();
         
-        // Early termination con probabilidad para rayos profundos
-        if depth < 3 && fastrand::f32() < 0.1 {
+        // Solo ruleta rusa para caminos PROFUNDOS (no matar caminos cortos de transparencias)
+        if depth > 6 && fastrand::f32() < 0.1 {
             return Vector3::zero();
         }
         
